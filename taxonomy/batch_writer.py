@@ -47,7 +47,7 @@ def proc_img(target_size, squarecrop, is_string=False, imgfile=None):
 
 class BirdsBatchWriter(object):
 
-    def __init__(self, out_dir, dataset_dir, target_size=256, squarecrop=True, validation_pct=0,
+    def __init__(self, out_dir, dataset_dir, target_size=256, squarecrop=True,
                  class_samples_max=None, file_pattern='*.jpg', macro_size=3072):
         np.random.seed(0)
         self.out_dir = os.path.expanduser(out_dir)
@@ -66,23 +66,28 @@ class BirdsBatchWriter(object):
         self.batch_prefix = 'data_batch_'
 
     def write_csv_files(self):
-        split_file = np.loadtxt(os.path.join(self.dataset_dir, 'train_test_val_split.txt'), delimiter=' ', dtype='str')
+        # image_idx : split
+        split_file = np.loadtxt(os.path.join(self.dataset_dir, 'train_test_val_split.txt'), delimiter=' ')
+        # image_idx : file_name
         images_key = np.loadtxt(os.path.join(self.dataset_dir, 'images.txt'), delimiter=' ', dtype='str')
-        image_class_labels = np.loadtxt(os.path.join(self.dataset_dir, 'image_class_labels.txt'), delimiter=' ', dtype='str')
-        classes = [x.strip()[x.index(' ')+1:] for x in open(os.path.join(self.dataset_dir, 'classes.txt'), 'r').readlines()]
-        file_label = dict(zip(images_key[:, 1], [int(x)-1 for x in image_class_labels[:, 1].tolist()]))
-        file_split = dict(zip(images_key[:, 1], split_file[:, 1]))
-        self.label_dict = dict(zip(classes, range(len(classes))))
-        self.label_names = classes
-        self.nclass = len(classes)
+        # image_idx : class_idx
+        image_class_labels = np.loadtxt(os.path.join(self.dataset_dir, 'image_class_labels.txt'), delimiter=' ') - 1
+        # image_idx : class_name
+        self.label_names = [x.strip()[x.index(' ')+1:] for x in open(os.path.join(self.dataset_dir, 'classes.txt'), 'r').readlines()]
+
+        self.nclass = len(self.label_names)
+        self.label_dict = dict(zip(self.label_names, range(self.nclass)))
+
         # Get the labels as the subdirs
         tlines = []
         tslines = []
         vlines = []
-        splits = {'0':tlines, '1':tslines, '2':vlines}
-        for filename in file_label:
-            full_filename = os.path.join(os.path.join(self.dataset_dir, 'images'), filename)
-            splits[file_split[filename]].append((full_filename, file_label[filename]))
+        splits = {0:tlines, 1:tslines, 2:vlines}
+        for i in xrange(split_file.shape[0]):
+            if self.class_samples_max and i > self.class_samples_max:
+                break
+            full_filename = os.path.join(os.path.join(self.dataset_dir, 'images'), images_key[i, 1])
+            splits[split_file[i, 1]].append((full_filename, image_class_labels[i, 1]))
 
         np.random.shuffle(tlines)
 
@@ -187,6 +192,7 @@ if __name__ == "__main__":
     parser.add_argument('--target_size', type=int, default=256,
                         help='Size in pixels to scale images (Must be 256 for i1k dataset)')
     parser.add_argument('--macro_size', type=int, default=2000, help='Images per processed batch')
+    parser.add_argument('--class_samples_max', help='Only process smaller amount of images', type=int, default=None)
     args = parser.parse_args()
 
     logger = logging.getLogger(__name__)
@@ -194,6 +200,7 @@ if __name__ == "__main__":
     # Supply dataset location
     # out_dir defaults to ~/nervana/data
     bw = BirdsBatchWriter(out_dir=args.data_dir, dataset_dir=args.dataset_dir,
-                     target_size=args.target_size, macro_size=args.macro_size)
+                     target_size=args.target_size, macro_size=args.macro_size,
+                     class_samples_max=args.class_samples_max)
 
     bw.run()

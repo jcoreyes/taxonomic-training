@@ -1,7 +1,7 @@
 """
 Trains various models.
 Example command:
-python train.py --model_type alexnet -s ~/taxonomic-training-saved-models -w ~/nervana/data/NABirds_batchs -b gpu
+python train.py --model_type alexnet -s ~/saved-models/alexnet.p -w ~/nervana/data/NABirds_batchs -b gpu --dataset_dir ~/NABirds
 """
 
 from neon.util.argparser import NeonArgparser
@@ -13,14 +13,15 @@ from neon.models import Model
 from neon.data import ImageLoader
 from neon.callbacks.callbacks import Callbacks
 
-import models
+import model_descriptions
 
 
 
 # parse the command line arguments (generates the backend)
 parser = NeonArgparser(__doc__)
-parser.add_argument('--model_type', help='Name of model', required=True, choices=['alexnet'])
+parser.add_argument('--model_type', help='Name of model', required=True, choices=['alexnet', 'branched'])
 parser.add_argument('--freeze', help='Layers to freeze starting from end', default=0)
+parser.add_argument('--dataset_dir', help='Directory containing images folder and label text files')
 args = parser.parse_args()
 
 # setup data provider
@@ -31,7 +32,7 @@ img_set_options = dict(repo_dir=args.data_dir,
 train = ImageLoader(set_name='train', **img_set_options)
 test = ImageLoader(set_name='validation', do_transforms=False, **img_set_options)
 
-model = models.create_model(args.model_type, args.freeze)
+model, cost = model_descriptions.create_model(args.model_type, args.freeze, args.dataset_dir, train)
 
 # drop weights LR by 1/250**(1/3) at epochs (23, 45, 66), drop bias LR by 1/10 at epoch 45
 weight_sched = Schedule([22, 44, 65], (1/250.)**(1/3.))
@@ -44,5 +45,4 @@ opt = MultiOptimizer({'default': opt_gdm, 'Bias': opt_biases})
 # configure callbacks
 valmetric = TopKMisclassification(k=5)
 callbacks = Callbacks(model, train, eval_set=test, metric=valmetric, **args.callback_args)
-cost = GeneralizedCost(costfunc=CrossEntropyMulti())
 model.fit(train, optimizer=opt, num_epochs=args.epochs, cost=cost, callbacks=callbacks)
