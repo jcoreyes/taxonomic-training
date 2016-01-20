@@ -38,8 +38,9 @@ def create_alexnet():
     return layers
 
 def create_branched_alexnet(ctree, img_loader):
-    # Replace last 3 layers (Linear, bias, and activation) with Branch Layer
-    layers = create_alexnet()[:-4]
+    # Replace last layer with Branch Layer
+    layers = create_alexnet()[:-1]
+    assert isinstance(layers[-1], Dropout)
 
     layer_container = {k: Affine(nout=len(v), init=Gaussian(scale=0.01), bias=Constant(-.7),
                           activation=Softmax(), linear_name='branch', bias_name='branch')

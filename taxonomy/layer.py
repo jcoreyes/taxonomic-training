@@ -177,7 +177,7 @@ class TaxonomicBranch(LayerContainer):
                 self.cost[:] = self.cost + cost
                 delta = self.costs[internalid].get_errors(x, targets)
                 # Accumulate gradients
-                self.deltas[:] = self.deltas + self._do_bprop(self.layers[internalid], delta)
+                self.deltas[:, i] = self.deltas[:, i] + self._do_bprop(self.layers[internalid], delta)
 
             self.total_deltas[:] = self.total_deltas + self.deltas #/ len(self.ctree.leafid_to_parentsid[label_id])
 

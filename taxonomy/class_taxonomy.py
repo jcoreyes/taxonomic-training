@@ -58,7 +58,7 @@ class ClassTaxonomy():
 
     def make_helper_dicts(self):
 
-        # Leafid to labelidx is dict of label_name : label_idx
+        # Leafid to labelidx is dict of leaf label_name : label_idx
         self.leafid_to_labelidx = {}
         classes_file = os.path.join(os.path.expanduser(self.dataset_dir), 'classes.txt')
         for idx, line in enumerate(open(classes_file,'r').readlines()):
@@ -73,8 +73,8 @@ class ClassTaxonomy():
                 assert len(node.get_children()) > 0
                 self.internalid_to_childrenid[node.name] = [x.name for x in node.get_children()]
 
+        # Dict of leaf label_name : list of (parent node label name, idx of parent node's child that leaf node is under)
         self.leafid_to_internallabels = {}
-
         for node in self.tree.get_leaves():
             internal_labels = []
             prev = node.name
@@ -83,7 +83,7 @@ class ClassTaxonomy():
                 internal_labels.append(self.internalid_to_childrenid[parent].index(prev))
                 prev = parent
             self.leafid_to_internallabels[node.name] = zip(self.leafid_to_parentsid[node.name], internal_labels)
-
+            self.leafid_to_internallabels[node.name].reverse() # List from broadest to specific
         intersect = set([x.name for x in self.tree.get_leaves()]) - set(self.leafid_to_labelidx)
         assert len(intersect) == 0, intersect
 

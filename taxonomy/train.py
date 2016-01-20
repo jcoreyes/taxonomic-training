@@ -1,7 +1,7 @@
 """
 Trains various models.
 Example command:
-python train.py --model_type alexnet -s ~/saved-models/alexnet.p -w ~/nervana/data/NABirds_batchs -b gpu --dataset_dir ~/NABirds
+python train.py --model_type branched -s ~/saved-models/branch.p -w ~/nervana/data/NABirds_batchs -b gpu --dataset_dir ~/NABirds
 """
 
 from neon.util.argparser import NeonArgparser
@@ -28,7 +28,7 @@ args = parser.parse_args()
 img_set_options = dict(repo_dir=args.data_dir,
                        inner_size=224,
                        dtype=args.datatype,
-                       subset_pct=100)
+                       subset_pct=10)
 train = ImageLoader(set_name='train', **img_set_options)
 test = ImageLoader(set_name='validation', do_transforms=False, **img_set_options)
 
