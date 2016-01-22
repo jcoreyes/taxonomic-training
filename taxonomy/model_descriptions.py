@@ -11,7 +11,7 @@ from neon.models import Model
 from neon.data import ImageLoader
 from neon.callbacks.callbacks import Callbacks
 
-from layer import TaxonomicBranch
+from layer import TaxonomicBranch, TaxonomicAffine
 from class_taxonomy import ClassTaxonomy
 from model_branch import TaxonomicBranchModel
 n_class = 555
@@ -42,7 +42,7 @@ def create_branched_alexnet(ctree, img_loader):
     layers = create_alexnet()[:-1]
     assert isinstance(layers[-1], Dropout)
 
-    layer_container = {k: Affine(nout=len(v), init=Gaussian(scale=0.01), bias=Constant(-.7),
+    layer_container = {k: TaxonomicAffine(nout=len(v), init=Gaussian(scale=0.01), bias=Constant(-.7),
                           activation=Softmax(), linear_name='branch', bias_name='branch')
                           for k, v in ctree.internalid_to_childrenid.items()}
 
@@ -61,7 +61,7 @@ def create_model(model_type, freeze, dataset_dir, img_loader):
     elif model_type == 'branched':
         ctree = ClassTaxonomy('Aves', 'taxonomy_dict.p', dataset_dir)
         layers = create_branched_alexnet(ctree, img_loader)
-        cost = None
+        cost = GeneralizedCost(costfunc=CrossEntropyMulti())
         model = TaxonomicBranchModel(layers=layers)
     else:
         raise NotImplementedError(model_type + " has not been implemented")

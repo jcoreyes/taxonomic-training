@@ -48,7 +48,7 @@ class TaxonomicBranchModel(Model):
         Arguments:
             dataset (iterable): Dataset iterator to perform fit on
         """
-        self.cost = CostContainer(None)
+        #self.cost = CostContainer(None)
         epoch = self.epoch_index
         self.total_cost[:] = 0
         # iterate through minibatches of the dataset
@@ -57,6 +57,7 @@ class TaxonomicBranchModel(Model):
             callbacks.on_minibatch_begin(epoch, mb_idx)
 
             cost = self.fprop(x)
+            # To allow for cost call backs to work
             self.cost.cost = cost
             self.total_cost[:] = self.total_cost + cost
 
@@ -76,3 +77,6 @@ class CostContainer():
     def __init__(self, cost):
         self.cost = cost
         self.costfunc = "taxonomic branch cost"
+
+    def get_cost(self, x, t):
+        pass

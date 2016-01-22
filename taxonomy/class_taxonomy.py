@@ -67,6 +67,7 @@ class ClassTaxonomy():
 
         self.leafid_to_parentsid = self.make_parent_dict()
 
+        # Dict of internal label_name : list of (children label_name)
         self.internalid_to_childrenid = {}
         for node in self.tree.get_descendants():
             if node.name not in self.leafid_to_labelidx:
