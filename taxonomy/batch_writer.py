@@ -7,12 +7,13 @@ import logging
 from glob import glob
 import functools
 import gzip
-from multiprocessing import Pool
+from multiprocessing import Pool, Value
 import numpy as np
 import os
 import tarfile
 import struct
 from PIL import Image as PILImage
+from PIL.ImageStat import Stat
 from neon.util.compat import range, StringIO
 from neon.util.persist import load_obj, save_obj
 from neon.util.argparser import NeonArgparser
@@ -21,9 +22,11 @@ from neon.util.argparser import NeonArgparser
 Example command:
 python batch_writer.py --data_dir ~/nervana/data/NABirds_batchs --dataset_dir ~/NABirds
 """
+# Initialize global mean values so multiple processes can update them async.
+r, g, b = Value('d', 0), Value('d', 0), Value('d', 0)
 
 # NOTE: We have to leave this helper function out of the class to use multiprocess pool.map
-def proc_img(target_size, squarecrop, is_string=False, imgfile=None):
+def proc_img(target_size, squarecrop, is_string=False, compute_global=False, imgfile=None, ):
     imgfile = StringIO(imgfile) if is_string else imgfile
     im = PILImage.open(imgfile)
 
@@ -42,6 +45,16 @@ def proc_img(target_size, squarecrop, is_string=False, imgfile=None):
 
     buf = StringIO()
     im.save(buf, format='JPEG', subsampling=0, quality=95)
+
+    if compute_global:
+        nim = np.array(im).mean(axis=0).mean(axis=0)
+        with r.get_lock():
+            r.value += nim[0]
+        with g.get_lock():
+            g.value += nim[1]
+        with b.get_lock():
+            b.value += nim[2]
+
     return buf.getvalue()
 
 
@@ -62,6 +75,7 @@ class BirdsBatchWriter(object):
         self.val_file = os.path.join(self.out_dir, 'val_file.csv.gz')
         self.test_file = os.path.join(self.out_dir, 'test_file.csv.gz')
         self.meta_file = os.path.join(self.out_dir, 'dataset_cache.pkl')
+        self.totals = np.zeros((target_size, target_size, 3))
         self.global_mean = np.array([0, 0, 0]).reshape((3, 1))
         self.batch_prefix = 'data_batch_'
 
@@ -120,12 +134,12 @@ class BirdsBatchWriter(object):
         self.nclass = {'l_id': (max(labels['l_id']) + 1)}
         return imfiles, labels
 
-    def write_batches(self, name, offset, labels, imfiles):
+    def write_batches(self, name, offset, labels, imfiles, compute_global=False):
         pool = Pool(processes=self.num_workers)
         npts = -(-len(imfiles) // self.macro_size)
         starts = [i * self.macro_size for i in range(npts)]
         is_tar = isinstance(imfiles[0], tarfile.ExFileObject)
-        proc_img_func = functools.partial(proc_img, self.target_size, self.squarecrop, is_tar)
+        proc_img_func = functools.partial(proc_img, self.target_size, self.squarecrop, is_tar, compute_global)
         imfiles = [imfiles[s:s + self.macro_size] for s in starts]
         labels = [{k: v[s:s + self.macro_size] for k, v in labels.iteritems()} for s in starts]
 
@@ -181,9 +195,14 @@ class BirdsBatchWriter(object):
             print("%s %s %s" % (sname, fname, start))
             if fname is not None and os.path.exists(fname):
                 imgs, labels = self.parse_file_list(fname)
-                self.write_batches(sname, start, labels, imgs)
+                if sname == 'train':
+                    self.write_batches(sname, start, labels, imgs, compute_global=True)
+                else:
+                    self.write_batches(sname, start, labels, imgs)
             else:
                 print("Skipping %s, file missing" % (sname))
+        self.global_mean = np.array([r.value, g.value, b.value]).reshape((3, 1)) / self.train_nrec
+        print "Global mean", self.global_mean
         self.save_meta()
 
 if __name__ == "__main__":
