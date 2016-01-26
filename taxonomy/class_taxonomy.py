@@ -17,7 +17,7 @@ class ClassTaxonomy():
             self.adj[''.join(re.findall("[a-zA-Z]+", k))] = [''.join(re.findall("[a-zA-Z]+", x)) for x in v]
 
         self.tree = self.build_tree()
-
+        self.update_adj()
         self.make_helper_dicts()
 
     def build_tree(self):
@@ -37,6 +37,12 @@ class ClassTaxonomy():
 
         t = Tree(t_str, format=8)
         return t
+
+    def update_adj(self):
+        self.adj = {}
+        for node in self.tree.get_descendants():
+            if len(node.get_children()) > 0:
+                self.adj[node.name] = [x.name for x in node.get_children()]
 
     def make_parent_dict(self):
         # Create dict of node: set of all ancestors
