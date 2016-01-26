@@ -1,18 +1,3 @@
-# ----------------------------------------------------------------------------
-# Copyright 2014 Nervana Systems Inc.
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#      http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-# ----------------------------------------------------------------------------
-
 from collections import OrderedDict
 import logging
 
@@ -24,7 +9,6 @@ from neon.models.model import Model
 import numpy as np
 
 logger = logging.getLogger(__name__)
-
 
 class TaxonomicBranchModel(Model):
 
@@ -71,6 +55,33 @@ class TaxonomicBranchModel(Model):
         # so it was never total cost, but sum of averages
         # across all the minibatches we trained on
         self.total_cost[:] = self.total_cost / dataset.nbatches
+
+    def eval(self, dataset, metric):
+        """
+        Evaluates a model on a dataset according to an input metric.
+
+        Arguments:
+            datasets (iterable): dataset to evaluate on.
+            metric (Cost): what function to evaluate dataset on.
+        """
+        self.initialize(dataset)
+        running_error = np.zeros((len(metric.metric_names)), dtype=np.float32)
+        nprocessed = 0
+        dataset.reset()
+        for x, t in dataset:
+            if metric.name == 'root_misclass':
+                for l in self.layers.layers[:-1]:
+                    x = l.fprop(x, inference=True)
+                x, t = self.layers.layers[-1].get_root_preds(x, t)
+            else:
+                x = self.fprop(x, inference=True)
+
+            # This logic is for handling partial batch sizes at the end of the dataset
+            bsz = min(dataset.ndata - nprocessed, self.be.bsz)
+            running_error += metric(x, t, calcrange=slice(0, bsz)) * bsz
+            nprocessed += bsz
+        running_error /= nprocessed
+        return running_error
 
 """ Cost container to work with minibatch end call back """
 class CostContainer():

@@ -1,5 +1,33 @@
-from neon.layers.container import LayerContainer
+from neon.layers.container import LayerContainer, Sequential, BranchNode
 from neon.layers.layer import interpret_in_shape, Layer, Linear, Bias, Activation, BatchNorm
+
+class FreezeSequential(Sequential):
+    """
+    Layer container that encapsulates a simple linear pathway of layers.
+
+    Arguments:
+        layers (list): List of objects which can be either a list of layers (including layer
+                       containers).
+    """
+    @property
+    def layers_to_optimize(self):
+        lto = []
+        for l in self.layers:
+            if isinstance(l, LayerContainer):
+                lto += l.layers_to_optimize
+            elif l.has_params and l.optimize:
+                lto.append(l)
+        return lto
+
+    def bprop(self, error, alpha=1.0, beta=0.0):
+        for l in reversed(self._layers):
+            if l.has_params and not l.optimize:
+                return
+            if type(l.prev_layer) is BranchNode or l is self._layers[0]:
+                error = l.bprop(error, alpha, beta)
+            else:
+                error = l.bprop(error)
+        return self._layers[0].deltas
 
 class TaxonomicBranch(LayerContainer):
 
@@ -24,6 +52,7 @@ class TaxonomicBranch(LayerContainer):
         self.ctree = ctree
         self.has_params = False
         self.img_loader = img_loader
+        self.optimize = True
 
     @property
     def layers_to_optimize(self):
@@ -80,7 +109,11 @@ class TaxonomicBranch(LayerContainer):
         self.deltas = self.be.iobuf(self.in_shape) if shared_deltas is None else shared_deltas
         self.total_deltas = self.be.zeros(self.deltas.shape)
         self.inputs = [self.be.zeros((self.nin, 1)) for _ in range(self.be.bsz)]
+
         self.leaf_preds = self.be.iobuf(len(self.ctree.labelidx_to_leafid))
+        self.root_preds = self.be.iobuf(len(self.ctree.internalid_to_childrenid[self.ctree.root]))
+        self.root_targets = self.be.iobuf(len(self.ctree.internalid_to_childrenid[self.ctree.root]))
+
         old_bsz = self.be.bsz
         self.be.bsz = 1
         self.targets = {}
@@ -159,6 +192,23 @@ class TaxonomicBranch(LayerContainer):
                     break
             #preds.append(pred)
         return self.leaf_preds
+
+    def get_root_preds(self, inputs, leaf_targets):
+        self.root_preds[:] = 0
+        self.root_targets[:] = 0
+        leaf_targets = leaf_targets.get().argmax(axis=0)
+
+        for i in range(self.be.bsz):
+            label_id = self.ctree.labelidx_to_leafid[leaf_targets[i]]
+            # Copy column of inputs which is one data point
+            self.inputs[i][:] = inputs[:, i]
+
+            x = self._do_fprop(self.layers[self.ctree.root], self.inputs[i]).get()
+            curr_idx = x.argmax()
+            self.root_preds[curr_idx, i] = 1
+            self.root_targets[self.ctree.leafid_to_internallabels[label_id][0][1], i] = 1
+
+        return self.root_preds, self.root_targets
 
     def zero_gradients(self):
         for lst in self.layers.values():
