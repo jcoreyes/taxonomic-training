@@ -16,8 +16,6 @@ from neon.callbacks.callbacks import Callbacks
 
 import model_descriptions
 
-
-
 # parse the command line arguments (generates the backend)
 parser = NeonArgparser(__doc__)
 parser.add_argument('--model_type', help='Name of model', required=True, choices=['alexnet', 'branched'])
@@ -33,10 +31,10 @@ train_set_options = dict(repo_dir=args.data_dir,
 test_set_options = dict(repo_dir=args.data_dir,
                        inner_size=224,
                        dtype=args.datatype,
-                       subset_pct=100)
+                       subset_pct=20)
 
 train = ImageLoader(set_name='train', **train_set_options)
-test = ImageLoader(set_name='validation', do_transforms=False, **test_set_options)
+test = ImageLoader(set_name='train', do_transforms=False, **test_set_options)
 
 model, cost = model_descriptions.create_model(args.model_type, args.freeze, args.dataset_dir,
                                               args.model_file, train)

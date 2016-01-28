@@ -106,8 +106,7 @@ class TaxonomicBranch(LayerContainer):
         self.be.bsz = old_bsz
 
     def allocate(self, shared_outputs=None, shared_deltas=None):
-        self.deltas = self.be.iobuf(self.in_shape) if shared_deltas is None else shared_deltas
-        self.total_deltas = self.be.zeros(self.deltas.shape)
+        self.deltas = self.be.iobuf(self.in_shape)
         self.inputs = [self.be.zeros((self.nin, 1)) for _ in range(self.be.bsz)]
 
         self.leaf_preds = self.be.iobuf(len(self.ctree.labelidx_to_leafid))
@@ -220,9 +219,10 @@ class TaxonomicBranch(LayerContainer):
         self.zero_gradients()
         # Get lead node label idxs from img loader
         temp_lbl = self.img_loader.labels[self.img_loader.idx].get()[0]
-        self.total_deltas[:] = 0
         self.total_cost = self.be.zeros((1, 1))
         self.cost = self.be.zeros((1, 1))
+        self.deltas[:] = 0
+
         # Iterate over each data point in batch
         for i in range(self.be.bsz):
             label_idx = temp_lbl[i]
@@ -230,7 +230,8 @@ class TaxonomicBranch(LayerContainer):
             self.inputs[i][:] = inputs[:, i]
             # Fprop all internal nodes label idx falls under
             self.cost[:] = 0
-            self.deltas[:] = 0
+
+
             for internalid, internallbl in self.ctree.leafid_to_internallabels[label_id]:
                 # Convert label idx to 1 hot encoding
                 targets = self.targets[internalid]
@@ -245,17 +246,15 @@ class TaxonomicBranch(LayerContainer):
                 # Accumulate gradients
                 self.deltas[:, i] = self.deltas[:, i] + self._do_bprop(self.layers[internalid], delta)
 
-                break
-
-            self.total_deltas[:] = self.total_deltas + self.deltas #/ len(self.ctree.leafid_to_parentsid[label_id])
-
             self.total_cost[:] = self.total_cost + self.cost
-        #import pdb
-        #pdb.set_trace()
+
+        #self.deltas[:] = self.deltas / len(self.ctree.leafid_to_parentsid[label_id])
+
+        self.total_cost[:] = self.total_cost / self.be.bsz
         return self.total_cost
 
     def bprop(self, error):
-        return self.total_deltas
+        return self.deltas
 
 
 class TaxonomicAffine(list):
