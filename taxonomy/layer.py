@@ -245,6 +245,7 @@ class TaxonomicBranch(LayerContainer):
                 delta = self.costs[internalid].get_errors(x, targets)
                 # Accumulate gradients
                 self.deltas[:, i] = self.deltas[:, i] + self._do_bprop(self.layers[internalid], delta)
+                break
 
             self.total_cost[:] = self.total_cost + self.cost
 
@@ -284,6 +285,7 @@ class TaxonomicLinear(Linear):
     def bprop(self, error, alpha=1.0, beta=0.0):
         if self.deltas:
             self.be.compound_dot(A=self.W.T, B=error, C=self.deltas, alpha=alpha, beta=beta)
+
         self.be.compound_dot(A=error, B=self.inputs.T, C=self.dW, beta=1.0)
         return self.deltas
 
